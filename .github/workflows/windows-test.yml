@@ -41,6 +41,9 @@ jobs:
           } catch {}
           "IsAdmin   : $isAdmin"
           "TEMP      : $env:TEMP"
+          "USERPROFILE  : $env:USERPROFILE"
+          "GetFolderPath: $([Environment]::GetFolderPath('UserProfile'))"
+          "LOCALAPPDATA : $env:LOCALAPPDATA"
           foreach ($c in 'Clear-RecycleBin','Delete-DeliveryOptimizationCache','Get-Service','Stop-Service','takeown','icacls') {
             "{0,-34}: {1}" -f $c, [bool](Get-Command $c -ErrorAction SilentlyContinue)
           }

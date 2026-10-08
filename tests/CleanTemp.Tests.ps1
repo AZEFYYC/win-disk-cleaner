@@ -300,7 +300,22 @@ Check 'R.menuAll' (Cnt @(Resolve-Selection -FromMenu -MenuGroups @('Safe', 'Deep
 Check 'R.menuSafe' (Cnt @(Resolve-Selection -FromMenu -MenuGroups @('Safe'))) 7
 Check 'R.menuDeep' (Cnt @(Resolve-Selection -FromMenu -MenuGroups @('Safe', 'Deep'))) 22
 
-Section '13 当前 Windows 环境能力（仅报告，不判定）'
+Section '13 当前用户目录排除（8.3 短名场景）'
+
+# %TEMP% 可能是 8.3 短名（C:\Users\RUNNER~1\...），而通配符 C:\Users\*\... 解析出长名，
+# 两者字符串不相等，所以"所有用户的临时文件"必须按 profile 前缀排除当前用户。
+$profileRoot = $null
+try { $profileRoot = [Environment]::GetFolderPath('UserProfile') } catch { }
+if ([string]::IsNullOrEmpty($profileRoot)) { $profileRoot = $env:USERPROFILE }
+
+Check 'U0.profileAvailable' ([bool](-not [string]::IsNullOrEmpty($profileRoot))) $true
+Check 'U1.underProfile' (Test-UnderCurrentProfile -Path (Join-Path $profileRoot 'AppData\Local\Temp')) $true
+Check 'U2.profileItself' (Test-UnderCurrentProfile -Path $profileRoot) $true
+Check 'U3.systemDir' (Test-UnderCurrentProfile -Path 'C:\Windows\Temp') $false
+Check 'U4.empty' (Test-UnderCurrentProfile -Path '') $false
+Check 'U5.siblingPrefix' (Test-UnderCurrentProfile -Path ($profileRoot + 'X')) $false
+
+Section '14 当前 Windows 环境能力（仅报告，不判定）'
 
 $isWin = ($env:OS -eq 'Windows_NT')
 Write-Host ("        Windows          : {0}" -f $isWin) -ForegroundColor Gray

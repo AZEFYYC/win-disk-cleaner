@@ -231,6 +231,28 @@ function Resolve-TargetItems {
     return $result
 }
 
+function Test-UnderCurrentProfile {
+    <#
+        判断路径是否位于当前用户的 profile 下。
+        用途：%TEMP% 可能以 8.3 短名形式出现（C:\Users\RUNNER~1\...），
+        而 C:\Users\*\... 通配符解析出的是长名，两者字符串不相等，
+        所以"排除当前用户的临时目录"必须按路径前缀判断，不能靠字符串去重。
+    #>
+    param([string]$Path)
+
+    if ([string]::IsNullOrEmpty($Path)) { return $false }
+
+    $root = $null
+    try { $root = [Environment]::GetFolderPath('UserProfile') } catch { }
+    if ([string]::IsNullOrEmpty($root)) { $root = $env:USERPROFILE }
+    if ([string]::IsNullOrEmpty($root)) { return $false }
+
+    $root = $root.TrimEnd('\')
+    $p = $Path.TrimEnd('\')
+    if ($p.Equals($root, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    return $p.StartsWith($root + '\', [StringComparison]::OrdinalIgnoreCase)
+}
+
 function Clear-DirectoryContent {
     param(
         [string]$Path,
@@ -418,6 +440,7 @@ function Get-CleanTargetList {
     $list.Add(@{
             Id = 'AllUsersTemp'; Name = '所有用户的临时文件'; Group = 'Deep'; Kind = 'Dir'
             Paths = @('%SystemDrive%\Users\*\AppData\Local\Temp'); Filter = '*'; Admin = $true
+            ExcludeCurrentProfile = $true
             Note = '当前用户的 %TEMP% 已在安全项中单独清理'
         }) | Out-Null
 
@@ -585,6 +608,9 @@ function Invoke-CleanTarget {
             $expanded = [System.Environment]::ExpandEnvironmentVariables($raw)
             if ($Target.Kind -eq 'Dir') {
                 foreach ($d in (Resolve-TargetDirectories -Pattern $expanded)) {
+                    # 跳过当前用户自己的目录：%TEMP% 可能是 8.3 短名（如 C:\Users\RUNNER~1\...），
+                    # 与通配符解析出的长名不是同一个字符串，靠字符串去重认不出来，必须按路径前缀排除。
+                    if ($Target['ExcludeCurrentProfile'] -and (Test-UnderCurrentProfile -Path $d)) { continue }
                     if (-not $script:SeenPaths.Contains($d)) {
                         $script:SeenPaths.Add($d) | Out-Null
                         $targets.Add($d) | Out-Null
