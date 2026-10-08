@@ -67,6 +67,9 @@ function Check {
 
 function Cnt {
     param($x)
+    # 注意：空管道在 PowerShell 5.1 里绑定成 $null，而 @($null).Count 是 1（PS7 是 0），
+    # 所以必须显式处理，否则“没有匹配项”会被误判成“有 1 项”。
+    if ($null -eq $x) { return 0 }
     return @($x).Count
 }
 
@@ -249,8 +252,10 @@ Check 'list.keysComplete' (Cnt ($list | Where-Object {
         })) 0
 Check 'list.kindsValid' (Cnt ($list | Where-Object { $_.Kind -notin @('Dir', 'Items', 'Exec') })) 0
 Check 'list.groupsValid' (Cnt ($list | Where-Object { $_.Group -notin @('Safe', 'Deep', 'Extra') })) 0
-$grp = $list | Group-Object Group | ForEach-Object { "$($_.Name)=$($_.Count)" }
-Write-Host ("        分组: {0}" -f ($grp -join ', ')) -ForegroundColor Gray
+$cSafe = Cnt ($list | Where-Object { $_.Group -eq 'Safe' })
+$cDeep = Cnt ($list | Where-Object { $_.Group -eq 'Deep' })
+$cExtra = Cnt ($list | Where-Object { $_.Group -eq 'Extra' })
+Write-Host ("        分组: Safe={0}, Deep={1}, Extra={2}" -f $cSafe, $cDeep, $cExtra) -ForegroundColor Gray
 
 Section '11 清理范围选择'
 
