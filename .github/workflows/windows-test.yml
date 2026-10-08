@@ -78,7 +78,7 @@ jobs:
           try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
           # 深度清理：会临时停止 wuauserv / bits / FontCache（删完自动重启），
           # 并调用 Clear-RecycleBin 与 Delete-DeliveryOptimizationCache
-          .\CleanTemp.ps1 -Deep -Yes -IncludeRecycleBin -NoLog
+          .\CleanTemp.ps1 -Deep -Yes -IncludeRecycleBin -RestartExplorer -NoLog
           "exit code: $LASTEXITCODE"
         # runner 是一次性的，跑坏了也无所谓；可能影响收尾步骤，故放在最后并允许失败
         continue-on-error: true

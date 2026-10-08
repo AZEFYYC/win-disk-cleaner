@@ -966,7 +966,8 @@ Write-Log ''
 $thumb = @($results | Where-Object { $_.Id -eq 'ThumbnailCache' -and $_.Deleted -gt 0 })
 if ($thumb.Count -gt 0 -and -not $dryRunMode) {
     $doRestart = [bool]$RestartExplorer
-    if (-not $doRestart) {
+    # -Yes 表示全程不询问：这时既不提示也不重启，需要重启就显式加 -RestartExplorer
+    if (-not $doRestart -and -not $Yes) {
         $ans = Read-MenuChoice '  是否重启资源管理器以立即刷新缩略图缓存？[Y/n]' 'Y'
         $doRestart = ($ans -match '^[Yy]')
     }

@@ -149,7 +149,7 @@ PowerShell 5.1**，不需要 Pester、不需要联网，所有删除都发生在
 powershell -ExecutionPolicy Bypass -File tests\CleanTemp.Tests.ps1
 ```
 
-输出 53 项断言结果，全部通过则退出码为 0。
+输出 59 项断言结果，全部通过则退出码为 0。
 
 如果把这个文件夹推到 GitHub，`.github/workflows/windows-test.yml` 会自动在
 **Windows PowerShell 5.1** 和 **PowerShell 7** 两个环境上分别执行：
