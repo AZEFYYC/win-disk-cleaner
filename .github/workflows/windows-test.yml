@@ -1,0 +1,94 @@
+# 说明：这是给 GitHub Actions 用的自动化测试流水线。
+# 只有把这个文件夹作为仓库推到 GitHub 之后才会生效；
+# 在 Windows 上直接使用本工具完全不需要它（删掉整个 .github 文件夹也不影响工具本身）。
+
+name: Windows Cleaner Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      real_cleanup:
+        description: '在 runner 上执行真实清理（安全项，会删掉 runner 自己的系统临时文件）'
+        type: boolean
+        default: false
+
+jobs:
+  test:
+    name: Test (${{ matrix.label }})
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Windows PowerShell 5.1
+            shell: powershell
+          - label: PowerShell 7
+            shell: pwsh
+
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 01 环境信息
+        shell: ${{ matrix.shell }}
+        run: |
+          try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+          "PSVersion : $($PSVersionTable.PSVersion)"
+          "Edition   : $($PSVersionTable.PSEdition)"
+          "OS        : $([Environment]::OSVersion.VersionString)"
+          try { "Caption   : $((Get-CimInstance Win32_OperatingSystem).Caption)" } catch {}
+          $isAdmin = $false
+          try {
+            $isAdmin = (New-Object Security.Principal.WindowsPrincipal(
+              [Security.Principal.WindowsIdentity]::GetCurrent()
+            )).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+          } catch {}
+          "IsAdmin   : $isAdmin"
+          "TEMP      : $env:TEMP"
+          "RunnerTemp: $env:RUNNER_TEMP"
+          foreach ($c in 'Clear-RecycleBin','Delete-DeliveryOptimizationCache','Get-Service','Stop-Service','Get-CimInstance','takeown','icacls') {
+            "{0,-34}: {1}" -f $c, [bool](Get-Command $c -ErrorAction SilentlyContinue)
+          }
+
+      - name: 02 解析脚本（语法检查）
+        shell: ${{ matrix.shell }}
+        run: |
+          try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+          $e = $null; $t = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("$pwd\CleanTemp.ps1", [ref]$t, [ref]$e) | Out-Null
+          if ($e.Count -gt 0) {
+            $e | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Message)" }
+            throw "解析失败：$($e.Count) 个错误"
+          }
+          "PARSE OK - $($t.Count) tokens"
+
+      - name: 03 逻辑测试
+        shell: ${{ matrix.shell }}
+        run: |
+          $cands = @('.\tests\CleanTemp.Tests.ps1', '.\CleanTemp.Tests.ps1')
+          $found = @($cands | Where-Object { Test-Path -LiteralPath $_ })
+          if ($found.Count -eq 0) { throw '找不到测试脚本 CleanTemp.Tests.ps1' }
+          $testPath = $found[0]
+          "运行测试: $testPath"
+          & $testPath
+          exit $LASTEXITCODE
+
+      - name: 04 预览清理（不删除任何文件）
+        shell: ${{ matrix.shell }}
+        run: |
+          try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+          & .\CleanTemp.ps1 -DryRun -Deep -NoLog
+          if ($LASTEXITCODE -ne 0) { throw "CleanTemp.ps1 预览退出码 $LASTEXITCODE" }
+
+      - name: 05 真实清理（仅手动触发且勾选时）
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.real_cleanup }}
+        shell: ${{ matrix.shell }}
+        run: |
+          try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+          & .\CleanTemp.ps1 -Safe -Yes -NoLog
+          "exit code: $LASTEXITCODE"
+        # runner 是一次性的，跑坏了也无所谓；可能影响收尾步骤，故放在最后并允许失败
+        continue-on-error: true

@@ -1,0 +1,5 @@
+# 测试沙箱（测试脚本运行时自动创建和清理）
+_lab/
+
+# 本工具在 Windows 上运行时会写到 %LOCALAPPDATA%\DiskTempCleaner\logs\
+*.log
