@@ -169,5 +169,5 @@ powershell -ExecutionPolicy Bypass -File tests\CleanTemp.Tests.ps1
 | `CleanTemp.ps1` | 主程序（全部清理逻辑，可单独使用） |
 | `一键清理.bat` | 双击启动器，调用主程序并保留窗口 |
 | `README.md` | 本文档 |
-| `tests/CleanTemp.Tests.ps1` | 零依赖测试套件（53 项断言），可选 |
+| `tests/CleanTemp.Tests.ps1` | 零依赖测试套件（59 项断言），可选 |
 | `.github/workflows/windows-test.yml` | GitHub Actions 自动测试流水线，可选 |
