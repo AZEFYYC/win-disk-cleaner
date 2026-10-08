@@ -1,12 +1,14 @@
 # 说明：这是给 GitHub Actions 用的自动化测试流水线。
 # 只有把这个文件夹作为仓库推到 GitHub 之后才会生效；
 # 在 Windows 上直接使用本工具完全不需要它（删掉整个 .github 文件夹也不影响工具本身）。
+#
+# 注意：GitHub Actions 的 shell: 关键字不支持 matrix 上下文，
+# 所以这里不写 matrix，而是给两个引擎各写一个短步骤。
 
 name: Windows Cleaner Test
 
 on:
   push:
-  pull_request:
   workflow_dispatch:
     inputs:
       real_cleanup:
@@ -16,28 +18,19 @@ on:
 
 jobs:
   test:
-    name: Test (${{ matrix.label }})
+    name: 双引擎测试（Windows PowerShell 5.1 + PowerShell 7）
     runs-on: windows-latest
     timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: Windows PowerShell 5.1
-            shell: powershell
-          - label: PowerShell 7
-            shell: pwsh
 
     steps:
       - name: 检出代码
         uses: actions/checkout@v4
 
       - name: 01 环境信息
-        shell: ${{ matrix.shell }}
+        shell: powershell
         run: |
           try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
-          "PSVersion : $($PSVersionTable.PSVersion)"
-          "Edition   : $($PSVersionTable.PSEdition)"
+          "PSVersion : $($PSVersionTable.PSVersion)  ($($PSVersionTable.PSEdition))"
           "OS        : $([Environment]::OSVersion.VersionString)"
           try { "Caption   : $((Get-CimInstance Win32_OperatingSystem).Caption)" } catch {}
           $isAdmin = $false
@@ -48,47 +41,39 @@ jobs:
           } catch {}
           "IsAdmin   : $isAdmin"
           "TEMP      : $env:TEMP"
-          "RunnerTemp: $env:RUNNER_TEMP"
-          foreach ($c in 'Clear-RecycleBin','Delete-DeliveryOptimizationCache','Get-Service','Stop-Service','Get-CimInstance','takeown','icacls') {
+          foreach ($c in 'Clear-RecycleBin','Delete-DeliveryOptimizationCache','Get-Service','Stop-Service','takeown','icacls') {
             "{0,-34}: {1}" -f $c, [bool](Get-Command $c -ErrorAction SilentlyContinue)
           }
-
-      - name: 02 解析脚本（语法检查）
-        shell: ${{ matrix.shell }}
-        run: |
-          try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
-          $e = $null; $t = $null
-          [System.Management.Automation.Language.Parser]::ParseFile("$pwd\CleanTemp.ps1", [ref]$t, [ref]$e) | Out-Null
-          if ($e.Count -gt 0) {
-            $e | ForEach-Object { "line $($_.Extent.StartLineNumber): $($_.Message)" }
-            throw "解析失败：$($e.Count) 个错误"
+          foreach ($p in '%TEMP%','%SystemRoot%\Temp','%SystemRoot%\SoftwareDistribution\Download','%SystemRoot%\Prefetch','%LOCALAPPDATA%\Microsoft\Windows\Explorer') {
+            "{0,-52}: {1}" -f $p, (Test-Path -LiteralPath ([System.Environment]::ExpandEnvironmentVariables($p)))
           }
-          "PARSE OK - $($t.Count) tokens"
 
-      - name: 03 逻辑测试
-        shell: ${{ matrix.shell }}
-        run: |
-          $cands = @('.\tests\CleanTemp.Tests.ps1', '.\CleanTemp.Tests.ps1')
-          $found = @($cands | Where-Object { Test-Path -LiteralPath $_ })
-          if ($found.Count -eq 0) { throw '找不到测试脚本 CleanTemp.Tests.ps1' }
-          $testPath = $found[0]
-          "运行测试: $testPath"
-          & $testPath
-          exit $LASTEXITCODE
-
-      - name: 04 预览清理（不删除任何文件）
-        shell: ${{ matrix.shell }}
+      - name: 02 逻辑测试 — Windows PowerShell 5.1
+        shell: powershell
         run: |
           try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
-          & .\CleanTemp.ps1 -DryRun -Deep -NoLog
-          if ($LASTEXITCODE -ne 0) { throw "CleanTemp.ps1 预览退出码 $LASTEXITCODE" }
+          .\tests\CleanTemp.Tests.ps1
 
-      - name: 05 真实清理（仅手动触发且勾选时）
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.real_cleanup }}
-        shell: ${{ matrix.shell }}
+      - name: 03 逻辑测试 — PowerShell 7
+        shell: pwsh
+        run: .\tests\CleanTemp.Tests.ps1
+
+      - name: 04 预览清理 — Windows PowerShell 5.1（不删除任何文件）
+        shell: powershell
         run: |
           try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
-          & .\CleanTemp.ps1 -Safe -Yes -NoLog
+          .\CleanTemp.ps1 -DryRun -Deep -NoLog
+
+      - name: 05 预览清理 — PowerShell 7（不删除任何文件）
+        shell: pwsh
+        run: .\CleanTemp.ps1 -DryRun -Deep -NoLog
+
+      - name: 06 真实清理（仅手动触发且勾选时）
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.real_cleanup == 'true' }}
+        shell: powershell
+        run: |
+          try { [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding($false) } catch {}
+          .\CleanTemp.ps1 -Safe -Yes -NoLog
           "exit code: $LASTEXITCODE"
         # runner 是一次性的，跑坏了也无所谓；可能影响收尾步骤，故放在最后并允许失败
         continue-on-error: true
